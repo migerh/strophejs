@@ -132,9 +132,8 @@ Strophe.addConnectionPlugin('muc', {
     msgiq - the unique id used to send the message
     */
     message: function(room, nick, message) {
-        var room_nick = this.test_append_nick(room, nick);        
         var msgid = this._connection.getUniqueId();
-        var msg = $msg({to: room_nick,
+        var msg = $msg({to: room,
                         from: this._connection.jid,
                         type: "groupchat",
                         id: msgid}).c("body",
@@ -276,6 +275,90 @@ Strophe.addConnectionPlugin('muc', {
             .c("x",{xmlns: Strophe.NS.MUC});
         this._connection.send(presence.tree());
     },
+
+    /***Function
+    Send a direct message to a user.
+    Parameters:
+    (String) to - The user's jid.
+    (String) message - The message to send to the user.
+    Returns:
+    msgid - the id used to send the message.
+    */
+    privateMessage: function(to, message) {
+        var msgid = this._connection.getUniqueId(),
+            msg = $msg({
+                to: to,
+                from: this._connection.jid,
+                id: msgid
+            })
+            .c("body", {
+                xmlns: Strophe.NS.CLIENT
+            })
+            .t(message);
+
+        msg.up().c("x", {
+            xmlns: "jabber:x:event"
+        })
+        .c("composing");
+
+        this._connection.send(msg);
+
+        return msgid;
+    },
+
+    /***Function
+    Kick a user from a room
+    Parameters:
+    (String) room - The multi-user chat room name
+    (String) user - The nickname of the user to kick
+    (String) reason - Optional a reason, currently ignored
+    (Function) success_cb - In case the kick was successful this is called
+    (Function) fail_cb - In case the kick failed, this function is called. The
+    reason why it failed is given as an error code.
+     */
+    kick: function(room, user, reason, success_cb, fail_cb) {
+        var iq = $iq({
+                to: room,
+                from: this._connection.jid,
+                type: "set"
+            })
+            .c("query", {
+                xmlns: Strophe.NS.MUC_ADMIN
+            })
+            .c("item", {
+                nick: user,
+                role: 'none',
+                affiliation: 'member'
+            });
+        if(reason && reason.length && reason.length > 0)
+            iq = iq.cnode(Strophe.xmlElement("reason", reason));
+
+        this._connection.sendIQ(iq, success_cb, fail_cb);
+    },
+
+    /***Function
+    Change the presence state for the current room.
+    Parameters:
+    (String) room - The multi-user chat room name.
+    (String) user - The nickname used in the chat room.
+    (String) show - XMPP status, may be null (available), chat, dnd, xa, or away.
+    (String) status - Optional a status message.
+    */
+    changePresence: function(room, user, show, status) {
+        var room_nick = this.test_append_nick(room, user),
+            pres = $pres({
+                from: this._connection.jid,
+                to: room_nick
+            });
+
+        if(show)
+            pres.cnode(Strophe.xmlElement("show", show));
+        if(status)
+            pres.cnode(Strophe.xmlElement("status", status));
+
+        this._connection.send(pres.tree());
+    },
+
     /***Function
     List all chat room available on a server.
     Parameters:
